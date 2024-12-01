@@ -2,19 +2,20 @@ import datetime
 import json
 from azure.iot.device import IoTHubDeviceClient, Message
 from time import sleep
-CONNECTION_STRING = "HostName=ra-develop-bobstconnect-01.azure-devices.net;DeviceId=LAUZHACKPI5;SharedAccessKey=cRbJIBv9IJEqd0W60+ogh0+ya+jTLVc34AIoTL+GEEY="
-MACHINE_ID = "lauzhack-pi5"
-DATA_IP = "10.0.4.95:80"
 
 
 class IoTDevice:
-    def __init__(self, connection_string, machine_id):
-        self.create_device_client(connection_string)
-        self.machine_id = machine_id
+    CONNECTION_STRING = "HostName=ra-develop-bobstconnect-01.azure-devices.net;DeviceId=LAUZHACKPI5;SharedAccessKey=cRbJIBv9IJEqd0W60+ogh0+ya+jTLVc34AIoTL+GEEY="
+    MACHINE_ID = "lauzhack-pi5"
+    DATA_IP = "10.0.4.95:80"
 
-    def create_device_client(self,connection_string):
+    def __init__(self):
+        self.create_device_client()
+        self.machine_id = self.MACHINE_ID
+
+    def create_device_client(self):
         try:
-            self.client = IoTHubDeviceClient.create_from_connection_string(connection_string)
+            self.client = IoTHubDeviceClient.create_from_connection_string(self.CONNECTION_STRING)
             self.client.connect()
             print("Successfully connected to IoT Hub!")
         except Exception as e:
@@ -23,8 +24,8 @@ class IoTDevice:
     def send_telemetry(self, speed, count, energy):
         telemetry_data = {
             "telemetry" : {
-                "machineid": MACHINE_ID,
-                "datasource": DATA_IP,
+                "machineid": self.MACHINE_ID,
+                "datasource": self.DATA_IP,
                 "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
                 "machinespeed" : speed,
                 "totaloutputunitcount" : count,
@@ -63,7 +64,7 @@ class IoTDevice:
 
 # Testing the code
 if __name__ == "__main__":
-    device = IoTDevice(CONNECTION_STRING, MACHINE_ID)
+    device = IoTDevice()
     try:
         caixes = 0
         for i in range(100):
