@@ -8,6 +8,7 @@ class IoTDevice:
     CONNECTION_STRING = "HostName=ra-develop-bobstconnect-01.azure-devices.net;DeviceId=LAUZHACKPI5;SharedAccessKey=cRbJIBv9IJEqd0W60+ogh0+ya+jTLVc34AIoTL+GEEY="
     MACHINE_ID = "lauzhack-pi5"
     DATA_IP = "10.0.4.95:80"
+    PROC_ID = 1
 
     def __init__(self):
         self.create_device_client()
@@ -70,7 +71,9 @@ class IoTDevice:
 
         self.__send_message([machine_event], "MachineEvent")
 
-
+    def increase_id(self):
+        PROC_ID = PROC_ID+1
+        return PROC_ID
     def __send_message(self, payload, event_type):
         message = Message(json.dumps(payload))
         message.content_type = "application/json"
@@ -101,9 +104,10 @@ event_collection = db["machine_events"]
 telemetry_collection = db["telemetry"]
 telemetry_data = {"speed":0.20,"count":0,"energy":0}
 device = IoTDevice()
-randid=1
+
 def get_time_json():
     return json.dumps({"timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")})
+
 def on_message(client, userdata, msg):
     topic = msg.topic
     data = msg.payload.decode()
@@ -123,12 +127,11 @@ def on_message(client, userdata, msg):
     elif topic =="machine/velocity":
         telemetry_data["speed"]=float(data)
         telemetry_collection.insert_many([device.get_json_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])])
-        device.send_telemetry(device.get_json_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"]))
+        device.send_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])
     elif topic=="machine/machineConsume":
         float_value = float(data)
-        print("hoal")
         telemetry_collection.insert_many([device.get_json_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])])
-        device.send_telemetry(device.get_json_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"]))
+        device.send_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])
         
 
     
