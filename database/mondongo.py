@@ -2,10 +2,6 @@ import paho.mqtt.client as mqtt
 from pymongo import MongoClient
 from datetime import datetime
 
-# MQTT Broker Configuration
-BROKER = "pi5"  # Public MQTT broker
-PORT = 1883
-TOPIC = ["machine/start", "machine/stop" , "machine/emergencyStop", "machine/consume"]
 
 # MongoDB Configuration
 MONGO_URI = "mongodb://localhost:27017/"  # Replace with your MongoDB URI
@@ -16,6 +12,12 @@ COLLECTION_NAME = "messages"
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client[DB_NAME]
 collection = db[COLLECTION_NAME]
+
+
+# MQTT Broker Configuration
+BROKER = "pi5"  # Public MQTT broker
+PORT = 1883
+TOPIC = ["machine/start", "machine/stop" , "machine/emergencyStop", "machine/consume"]
 
 # Define the on_connect callback
 def on_connect(client, userdata, flags, rc):

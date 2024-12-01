@@ -19,7 +19,7 @@ if __name__ == '__main__':
     box = 0
     while True:
         box +=1
-        #client.publish("machine/start", True)
-        #client.publish("machine/velocity", 0.27) 
-        client.publish("machine/boxcount", box)
+        client.publish("machine/start", True)
+        #client.publish("machine/velocity", 0.2) 
+        #client.publish("machine/boxcount", box)
         sleep(1)
