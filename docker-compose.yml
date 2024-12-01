@@ -1,0 +1,12 @@
+services:
+  mqtt-sensor-gate:
+    image: eclipse-mosquitto:2.0
+    container_name: mqtt
+    volumes:
+      - ./mosquitto/config:/mosquitto/config   
+      - ./mosquitto/data:/mosquitto/data       
+      - ./mosquitto/log:/mosquitto/log         
+    expose:
+      - 1883:1883
+
+
