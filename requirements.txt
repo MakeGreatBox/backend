@@ -1,0 +1,6 @@
+fastapi==0.115.5
+uvicorn==0.32.1
+azure-iot-device==2.14.0
+azure-iot-device==2.14.0
+paho-mqtt==1.6.1
+pymongo==4.9.2

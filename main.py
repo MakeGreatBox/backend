@@ -1,13 +1,13 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone
+from pydantic import BaseModel
 import json
-from azure.iot.device import IoTHubDeviceClient, Message
-from time import sleep
 
-import paho.mqtt.client as mqtt
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from azure.iot.device import IoTHubDeviceClient, Message
+from paho.mqtt import client as mqtt
 from pymongo import MongoClient
+
 class IoTDevice:
     CONNECTION_STRING = "HostName=ra-develop-bobstconnect-01.azure-devices.net;DeviceId=LAUZHACKPI5;SharedAccessKey=cRbJIBv9IJEqd0W60+ogh0+ya+jTLVc34AIoTL+GEEY="
     MACHINE_ID = "lauzhack-pi5"
@@ -37,22 +37,12 @@ class IoTDevice:
                 "totalworkingenergy": energy
             }
         }
-    def send_telemetry(self, speed, count, energy):
-        telemetry_data = {
-            "telemetry" : {
-                "machineid": self.MACHINE_ID,
-                "datasource": self.DATA_IP,
-                "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
-                "machinespeed" : speed,
-                "totaloutputunitcount" : count,
-                "totalworkingenergy": energy
-            }
-        }
     
+    def send_telemetry(self, speed, count, energy):
+        telemetry_data = self.get_json_telemetry(speed, count, energy)
         self.__send_message(telemetry_data,"Telemetry")
     
     def get_machine_event(self, event_type, job_id, total_output_unit_count, machine_speed):
-
         return {
             "type": event_type,
             "equipmentId": self.machine_id,
@@ -63,16 +53,7 @@ class IoTDevice:
         }
 
     def send_machine_event(self, event_type, job_id, total_output_unit_count, machine_speed):
-
-        machine_event = {
-            "type": event_type,
-            "equipmentId": self.machine_id,
-            "jobId": job_id,
-            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
-            "machineSpeed": machine_speed,
-            "totaloutputunitcount": total_output_unit_count,
-        }
-
+        machine_event = self.get_machine_event(event_type, job_id, total_output_unit_count, machine_speed)
         self.__send_message([machine_event], "MachineEvent")
 
     def increase_id(self):
@@ -91,10 +72,7 @@ class IoTDevice:
 
 MONGO_URI = "mongodb://localhost:27017/"
 DB_NAME = "my_mongo"
-mongo_client = MongoClient(MONGO_URI)
-db = mongo_client[DB_NAME]
-event_collection = db["machine_events"]
-telemetry_collection = db["telemetry"]
+db = MongoClient(MONGO_URI)[DB_NAME]
 
 telemetry_data = {"speed":0.20,"count":0,"energy":0}
 device = IoTDevice()
@@ -102,7 +80,7 @@ device = IoTDevice()
 def get_time_json():
     return json.dumps({"timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")})
 
-def on_message(client, userdata, msg):
+def on_message(client:mqtt.Client, userdata, msg:mqtt.MQTTMessage):
     topic = msg.topic
     data = msg.payload.decode()
     if topic == "machine/boxes":
@@ -111,12 +89,12 @@ def on_message(client, userdata, msg):
         client.publish("machine/boxcount",json_data["total_boxes"])
     elif topic=="machine/machineConsume":
         telemetry_data["energy"] = float(data)
-        telemetry_collection.insert_many([device.get_json_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])])
+        db["telemetry"].insert_many([device.get_json_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])])
         device.send_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])
         
 
     
-def on_connect(client, userdata, flags, rc):
+def on_connect(client:mqtt.Client, userdata, flags, rc):
     client.subscribe([("machine/machineConsume", 0), ("machine/start", 0), ("machine/velocity",0), ("machine/boxes",0), ("machine/stop",0)])
 
 client = mqtt.Client()
@@ -133,18 +111,19 @@ app.add_middleware(
     allow_methods=["*"],  # Allow all HTTP methods (GET, POST, OPTIONS, etc.)
     allow_headers=["*"],  # Allow all headers
 )
+
 class State(BaseModel):
     state: bool
     
 @app.post("/buttonState/")
 def create_item(state:State):
     if state.state:
-        event_collection.insert_many([device.get_machine_event("startProducing",device.PROC_ID,telemetry_data["count"],telemetry_data["speed"])])
+        db["machine_events"].insert_many([device.get_machine_event("startProducing",device.PROC_ID,telemetry_data["count"],telemetry_data["speed"])])
         device.send_machine_event("startProducing",device.PROC_ID,telemetry_data["count"],telemetry_data["speed"])
         device.increase_id()
         client.publish("machine/start",True)
     else:
-        event_collection.insert_many([device.get_machine_event("stopProducing",device.PROC_ID,telemetry_data["count"],telemetry_data["speed"])])
+        db["machine_events"].insert_many([device.get_machine_event("stopProducing",device.PROC_ID,telemetry_data["count"],telemetry_data["speed"])])
         device.send_machine_event("stopProducing",device.PROC_ID,telemetry_data["count"],telemetry_data["speed"])
         device.increase_id()
         client.publish("machine/stop",True)
@@ -156,13 +135,13 @@ def get_data(value:int):
     speed_azure, speed_mqtt = mapper[value]
     client.publish("machine/velocity",speed_mqtt)
     telemetry_data["speed"]=speed_azure
-    telemetry_collection.insert_many([device.get_json_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])])
+    db["telemetry"].insert_many([device.get_json_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])])
     device.send_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])
 
 @app.get("/cosa/cosa/")
 def get_story():
-    stats = event_collection.find({"type":"stopProducing"})
+    stats = db["machine_events"].find({"type":"stopProducing"})
     for i in stats:
         print(i["timestamp"])
-        next_document = event_collection.find({"timestamp": {"$gt": i["timestamp"]}}).sort("timestamp", 1).limit(1)
+        next_document = db["machine_events"].find({"timestamp": {"$gt": i["timestamp"]}}).sort("timestamp", 1).limit(1)
         time = next_document["timestamp"]-i["timestamp"]
