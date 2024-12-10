@@ -8,10 +8,17 @@ from mqtt_connection  import Mqtt
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-device = IoTDevice()
-mondongo = MondongoDB()
 
 telemetry_data = {"speed":0.20,"count":0,"energy":0}
+
+device = IoTDevice()
+mondongo = MondongoDB()
+client = Mqtt(mondongo, device, telemetry_data,
+              [("machine/machineConsume", 0), 
+               ("machine/start", 0), 
+               ("machine/velocity",0), 
+               ("machine/boxes",0), 
+               ("machine/stop",0)])
 
 app = FastAPI()
 app.add_middleware(
@@ -22,14 +29,6 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
 )
 
-client = Mqtt([("machine/machineConsume", 0), 
-               ("machine/start", 0), 
-               ("machine/velocity",0), 
-               ("machine/boxes",0), 
-               ("machine/stop",0)],
-               mondongo,
-               device,
-               telemetry_data)
 class State(BaseModel):
     state: bool
     

@@ -4,7 +4,7 @@ from mongo_connection import MondongoDB
 import json
 
 class Mqtt:
-    def __init__(self, topics,mondongo:MondongoDB, device:IoTDevice, telemetry):
+    def __init__(self, mondongo:MondongoDB, device:IoTDevice, telemetry, topics):
         self.mondongo = mondongo
         self.device = device
         self.telemetry = telemetry
