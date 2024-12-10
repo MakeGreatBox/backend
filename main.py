@@ -1,45 +1,17 @@
 from datetime import datetime, timezone
 from pydantic import BaseModel
-import json
 
 from azure_connection import IoTDevice
 from mongo_connection import MondongoDB
+from mqtt_connection  import Mqtt
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from paho.mqtt import client as mqtt
-from pymongo import MongoClient
 
+device = IoTDevice()
 mondongo = MondongoDB()
 
 telemetry_data = {"speed":0.20,"count":0,"energy":0}
-device = IoTDevice()
-
-def get_time_json():
-    return json.dumps({"timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")})
-
-def on_message(client:mqtt.Client, userdata, msg:mqtt.MQTTMessage):
-    topic = msg.topic
-    data = msg.payload.decode()
-    if topic == "machine/boxes":
-        json_data = json.loads(data)
-        telemetry_data["count"]=json_data["total_boxes"]
-        client.publish("machine/boxcount",json_data["total_boxes"])
-    elif topic=="machine/machineConsume":
-        telemetry_data["energy"] = float(data)
-        mondongo.telemetry.insert_many([device.get_json_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])])
-        device.send_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])
-        
-
-    
-def on_connect(client:mqtt.Client, userdata, flags, rc):
-    client.subscribe([("machine/machineConsume", 0), ("machine/start", 0), ("machine/velocity",0), ("machine/boxes",0), ("machine/stop",0)])
-
-client = mqtt.Client()
-client.connect("pi5", 1883)
-client.loop_start()
-client.on_connect = on_connect
-client.on_message = on_message
 
 app = FastAPI()
 app.add_middleware(
@@ -50,6 +22,14 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
 )
 
+client = Mqtt([("machine/machineConsume", 0), 
+               ("machine/start", 0), 
+               ("machine/velocity",0), 
+               ("machine/boxes",0), 
+               ("machine/stop",0)],
+               mondongo,
+               device,
+               telemetry_data)
 class State(BaseModel):
     state: bool
     
