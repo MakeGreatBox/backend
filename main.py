@@ -1,3 +1,6 @@
+from fastapi import FastAPI
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone
 import json
 from azure.iot.device import IoTHubDeviceClient, Message
@@ -9,11 +12,11 @@ class IoTDevice:
     CONNECTION_STRING = "HostName=ra-develop-bobstconnect-01.azure-devices.net;DeviceId=LAUZHACKPI5;SharedAccessKey=cRbJIBv9IJEqd0W60+ogh0+ya+jTLVc34AIoTL+GEEY="
     MACHINE_ID = "lauzhack-pi5"
     DATA_IP = "10.0.4.95:80"
-    PROC_ID = 1
 
     def __init__(self):
         self.create_device_client()
         self.machine_id = self.MACHINE_ID
+        self.PROC_ID = 1
 
     def create_device_client(self):
         try:
@@ -73,8 +76,8 @@ class IoTDevice:
         self.__send_message([machine_event], "MachineEvent")
 
     def increase_id(self):
-        PROC_ID = PROC_ID+1
-        return PROC_ID
+        self.PROC_ID = self.PROC_ID+1
+        return self.PROC_ID
     def __send_message(self, payload, event_type):
         message = Message(json.dumps(payload))
         message.content_type = "application/json"
@@ -102,25 +105,12 @@ def get_time_json():
 def on_message(client, userdata, msg):
     topic = msg.topic
     data = msg.payload.decode()
-    
-    if topic == "machine/start" and data!="True" and data!="False":
-        event_collection.insert_many(device.get_machine_event("startRunning",device.PROC_ID,telemetry_data["count"],telemetry_data["speed"]))
-        device.send_machine_event("startRunning",device.PROC_ID,telemetry_data["count"],telemetry_data["speed"])
-        device.increase_id()
-    elif topic == "machine/stop" and data!="True" and data!="False":
-        event_collection.insert_many(device.get_machine_event("startRunning",device.PROC_ID,telemetry_data["count"],telemetry_data["speed"]))
-        device.send_machine_event("startRunning",device.PROC_ID,telemetry_data["count"],telemetry_data["speed"])
-        device.increase_id()
-    elif topic == "machine/boxes":
+    if topic == "machine/boxes":
         json_data = json.loads(data)
         telemetry_data["count"]=json_data["total_boxes"]
         client.publish("machine/boxcount",json_data["total_boxes"])
-    elif topic =="machine/velocity":
-        telemetry_data["speed"]=float(data)
-        telemetry_collection.insert_many([device.get_json_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])])
-        device.send_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])
     elif topic=="machine/machineConsume":
-        float_value = float(data)
+        telemetry_data["energy"] = float(data)
         telemetry_collection.insert_many([device.get_json_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])])
         device.send_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])
         
@@ -134,3 +124,45 @@ client.connect("pi5", 1883)
 client.loop_start()
 client.on_connect = on_connect
 client.on_message = on_message
+
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Or specify allowed origins here
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, OPTIONS, etc.)
+    allow_headers=["*"],  # Allow all headers
+)
+class State(BaseModel):
+    state: bool
+    
+@app.post("/buttonState/")
+def create_item(state:State):
+    if state.state:
+        event_collection.insert_many([device.get_machine_event("startProducing",device.PROC_ID,telemetry_data["count"],telemetry_data["speed"])])
+        device.send_machine_event("startProducing",device.PROC_ID,telemetry_data["count"],telemetry_data["speed"])
+        device.increase_id()
+        client.publish("machine/start",True)
+    else:
+        event_collection.insert_many([device.get_machine_event("stopProducing",device.PROC_ID,telemetry_data["count"],telemetry_data["speed"])])
+        device.send_machine_event("stopProducing",device.PROC_ID,telemetry_data["count"],telemetry_data["speed"])
+        device.increase_id()
+        client.publish("machine/stop",True)
+
+@app.post("/speed/{value}/")
+def get_data(value:int):
+    mapper = {1:(0.15,0.2),2:(0.23,0.25), 3:(0.25,0.27)}
+
+    speed_azure, speed_mqtt = mapper[value]
+    client.publish("machine/velocity",speed_mqtt)
+    telemetry_data["speed"]=speed_azure
+    telemetry_collection.insert_many([device.get_json_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])])
+    device.send_telemetry(telemetry_data["speed"],telemetry_data["count"],telemetry_data["energy"])
+
+@app.get("/cosa/cosa/")
+def get_story():
+    stats = event_collection.find({"type":"stopProducing"})
+    for i in stats:
+        print(i["timestamp"])
+        next_document = event_collection.find({"timestamp": {"$gt": i["timestamp"]}}).sort("timestamp", 1).limit(1)
+        time = next_document["timestamp"]-i["timestamp"]
