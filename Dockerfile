@@ -6,6 +6,8 @@ COPY requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY gateway.py .
+COPY main.py .
+COPY azure_connection.py .
+COPY mongo_connection.py .
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0"]
